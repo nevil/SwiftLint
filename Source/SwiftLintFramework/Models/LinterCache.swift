@@ -15,30 +15,35 @@ internal enum LinterCacheError: Error {
 }
 
 public final class LinterCache {
-    private var cache = [String: Any]()
+    private var readCache = [String: Any]()
+    private var writeCache = [String: Any]()
     private let lock = NSLock()
-    internal lazy var fileManager: LintableFileManager = FileManager.default
+    internal let fileManager: LintableFileManager
     private let location: URL?
 
-    internal init() {
+    internal init(fileManager: LintableFileManager = FileManager.default) {
         location = nil
+        self.fileManager = fileManager
     }
 
-    internal init(cache: Any) throws {
+    internal init(cache: Any, fileManager: LintableFileManager = FileManager.default) throws {
         guard let dictionary = cache as? [String: Any] else {
             throw LinterCacheError.invalidFormat
         }
 
-        self.cache = dictionary
+        self.readCache = dictionary
         location = nil
+        self.fileManager = fileManager
     }
 
-    public init(configuration: Configuration) {
+    public init(configuration: Configuration,
+                fileManager: LintableFileManager = FileManager.default) {
         location = configuration.cacheURL
         if let data = try? Data(contentsOf: location!),
             let json = try? JSONSerialization.jsonObject(with: data) {
-            cache = (json as? [String: Any]) ?? [:]
+            readCache = (json as? [String: Any]) ?? [:]
         }
+        self.fileManager = fileManager
     }
 
     internal func cache(violations: [StyleViolation], forFile file: String, configuration: Configuration) {
@@ -49,12 +54,12 @@ public final class LinterCache {
         let configurationDescription = configuration.cacheDescription
 
         lock.lock()
-        var filesCache = (cache[configurationDescription] as? [String: Any]) ?? [:]
+        var filesCache = (writeCache[configurationDescription] as? [String: Any]) ?? [:]
         filesCache[file] = [
             Key.violations.rawValue: violations.map(dictionary(for:)),
             Key.lastModification.rawValue: lastModification.timeIntervalSinceReferenceDate
         ]
-        cache[configurationDescription] = filesCache
+        writeCache[configurationDescription] = filesCache
         lock.unlock()
     }
 
@@ -65,18 +70,14 @@ public final class LinterCache {
 
         let configurationDescription = configuration.cacheDescription
 
-        lock.lock()
-
-        guard let filesCache = cache[configurationDescription] as? [String: Any],
+        guard let filesCache = readCache[configurationDescription] as? [String: Any],
             let entry = filesCache[file] as? [String: Any],
             let cacheLastModification = entry[Key.lastModification.rawValue] as? TimeInterval,
             cacheLastModification == lastModification.timeIntervalSinceReferenceDate,
             let violations = entry[Key.violations.rawValue] as? [[String: Any]] else {
-                lock.unlock()
                 return nil
         }
 
-        lock.unlock()
         return violations.flatMap { StyleViolation.from(cache: $0, file: file) }
     }
 
@@ -84,10 +85,34 @@ public final class LinterCache {
         guard let url = location else {
             throw LinterCacheError.noLocation
         }
+        guard !writeCache.isEmpty else {
+            return
+        }
         lock.lock()
-        let json = toJSON(cache)
+        let cache = mergeCaches()
         lock.unlock()
+
+        let json = toJSON(cache)
         try json.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    internal func flushWriteCacheToReadCache() {
+        lock.lock()
+        readCache = mergeCaches()
+        writeCache = [:]
+        lock.unlock()
+    }
+
+    private func mergeCaches() -> [String: Any] {
+        var cache = readCache
+        for (key, value) in writeCache {
+            var filesCache = (cache[key] as? [String: Any]) ?? [:]
+            for (file, fileCache) in (value as? [String: Any]) ?? [:] {
+                filesCache[file] = fileCache
+            }
+            cache[key] = filesCache
+        }
+        return cache
     }
 
     private func dictionary(for violation: StyleViolation) -> [String: Any] {

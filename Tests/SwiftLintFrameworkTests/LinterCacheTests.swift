@@ -77,9 +77,7 @@ class LinterCacheTests: XCTestCase {
     // MARK: Test Helpers
 
     private var cache: LinterCache = {
-        let cache = LinterCache()
-        cache.fileManager = TestFileManager()
-        return cache
+        return LinterCache(fileManager: TestFileManager())
     }()
 
     private func makeCacheTestHelper(dict: [String: Any]) -> CacheTestHelper {
@@ -89,6 +87,8 @@ class LinterCacheTests: XCTestCase {
     private func cacheAndValidate(violations: [StyleViolation], forFile: String, configuration: Configuration,
                                   file: StaticString = #file, line: UInt = #line) {
         cache.cache(violations: violations, forFile: forFile, configuration: configuration)
+        cache.flushWriteCacheToReadCache()
+
         XCTAssertEqual(cache.violations(forFile: forFile, configuration: configuration)!, violations,
                        file: file, line: line)
     }
