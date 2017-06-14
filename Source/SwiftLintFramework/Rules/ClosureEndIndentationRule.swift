@@ -19,80 +19,105 @@ public struct ClosureEndIndentationRule: ASTRule, OptInRule, ConfigurationProvid
         name: "Closure End Indentation",
         description: "Closure end should have the same indentation as the line that started it.",
         nonTriggeringExamples: [
-            "SignalProducer(values: [1, 2, 3])\n" +
-            "   .startWithNext { number in\n" +
-            "       print(number)\n" +
-            "   }\n",
-            "[1, 2].map { $0 + 1 }\n",
-            "return match(pattern: pattern, with: [.comment]).flatMap { range in\n" +
-            "   return Command(string: contents, range: range)\n" +
-            "}.flatMap { command in\n" +
-            "   return command.expand()\n" +
-            "}\n",
-            "foo(foo: bar,\n" +
-            "    options: baz) { _ in }\n",
-            "someReallyLongProperty.chainingWithAnotherProperty\n" +
-            "   .foo { _ in }",
-            "foo(abc, 123)\n" +
-            "{ _ in }\n"
+            "\n"
+//            "SignalProducer(values: [1, 2, 3])\n" +
+//            "   .startWithNext { number in\n" +
+//            "       print(number)\n" +
+//            "   }\n",
+//            "[1, 2].map { $0 + 1 }\n",
+//            "return match(pattern: pattern, with: [.comment]).flatMap { range in\n" +
+//            "   return Command(string: contents, range: range)\n" +
+//            "}.flatMap { command in\n" +
+//            "   return command.expand()\n" +
+//            "}\n",
+//            "foo(foo: bar,\n" +
+//            "    options: baz) { _ in }\n",
+//            "someReallyLongProperty.chainingWithAnotherProperty\n" +
+//            "   .foo { _ in }",
+//            "foo(abc, 123)\n" +
+//            "{ _ in }\n"
         ],
         triggeringExamples: [
-            "SignalProducer(values: [1, 2, 3])\n" +
-            "   .startWithNext { number in\n" +
-            "       print(number)\n" +
-            "↓}\n",
-            "return match(pattern: pattern, with: [.comment]).flatMap { range in\n" +
-            "   return Command(string: contents, range: range)\n" +
-            "   ↓}.flatMap { command in\n" +
-            "   return command.expand()\n" +
-            "↓}\n"
+            "func hoge(/*hello*/) {\n" +
+            "    print(\"Hello\")\n" +
+            "}\n" +
+            "\n" +
+            "func fuga() {\n" +
+            "//    print(\"Hello\")\n" +
+            "}\n" +
+            "func piyo() -> Int {\n" +
+            "    return 5" +
+            "}\n" +
+            "func hogera() -> Int {\n" +
+            "//    return 5" +
+            "}\n"
+//piyo, hogera, hogehoge
+//            "SignalProducer(values: [1, 2, 3])\n" +
+//            "   .startWithNext { number in\n" +
+//            "       print(number)\n" +
+//            "↓}\n",
+//            "return match(pattern: pattern, with: [.comment]).flatMap { range in\n" +
+//            "   return Command(string: contents, range: range)\n" +
+//            "   ↓}.flatMap { command in\n" +
+//            "   return command.expand()\n" +
+//            "↓}\n"
         ]
     )
 
     private static let notWhitespace = regex("[^\\s]")
 
-    public func validate(file: File, kind: SwiftExpressionKind,
+    public func validate(file: File, kind: SwiftDeclarationKind,
                          dictionary: [String: SourceKitRepresentable]) -> [StyleViolation] {
-        guard kind == .call else {
+        guard SwiftDeclarationKind.functionKinds().contains(kind) else {
             return []
         }
 
-        let contents = file.contents.bridge()
-        guard let offset = dictionary.offset,
-            let length = dictionary.length,
-            let bodyLength = dictionary.bodyLength,
-            let nameOffset = dictionary.nameOffset,
-            let nameLength = dictionary.nameLength,
-            bodyLength > 0,
-            case let endOffset = offset + length - 1,
-            contents.substringWithByteRange(start: endOffset, length: 1) == "}",
-            let startOffset = startOffset(forDictionary: dictionary, file: file),
-            let (startLine, _) = contents.lineAndCharacter(forByteOffset: startOffset),
-            let (endLine, endPosition) = contents.lineAndCharacter(forByteOffset: endOffset),
-            case let nameEndPosition = nameOffset + nameLength,
-            let (bodyOffsetLine, _) = contents.lineAndCharacter(forByteOffset: nameEndPosition),
-            startLine != endLine, bodyOffsetLine != endLine,
-            !containsSingleLineClosure(dictionary: dictionary, endPosition: endOffset, file:file) else {
-                return []
+        guard dictionary["key.substructure"] == nil else {
+            return []
         }
 
-        let range = file.lines[startLine - 1].range
-        let regex = ClosureEndIndentationRule.notWhitespace
-        let actual = endPosition - 1
-        guard let match = regex.firstMatch(in: file.contents, options: [], range: range)?.range,
-            case let expected = match.location - range.location,
-            expected != actual  else {
-                return []
-        }
+        func hello() {}
 
-        let reason = "Closure end should have the same indentation as the line that started it. " +
-                     "Expected \(expected), got \(actual)."
-        return [
-            StyleViolation(ruleDescription: type(of: self).description,
-                           severity: configuration.severity,
-                           location: Location(file: file, byteOffset: endOffset),
-                           reason: reason)
-        ]
+        dump(dictionary)
+
+        return []
+
+//        let contents = file.contents.bridge()
+//        guard let offset = dictionary.offset,
+//            let length = dictionary.length,
+//            let bodyLength = dictionary.bodyLength,
+//            let nameOffset = dictionary.nameOffset,
+//            let nameLength = dictionary.nameLength,
+//            bodyLength > 0,
+//            case let endOffset = offset + length - 1,
+//            contents.substringWithByteRange(start: endOffset, length: 1) == "}",
+//            let startOffset = startOffset(forDictionary: dictionary, file: file),
+//            let (startLine, _) = contents.lineAndCharacter(forByteOffset: startOffset),
+//            let (endLine, endPosition) = contents.lineAndCharacter(forByteOffset: endOffset),
+//            case let nameEndPosition = nameOffset + nameLength,
+//            let (bodyOffsetLine, _) = contents.lineAndCharacter(forByteOffset: nameEndPosition),
+//            startLine != endLine, bodyOffsetLine != endLine,
+//            !containsSingleLineClosure(dictionary: dictionary, endPosition: endOffset, file:file) else {
+//                return []
+//        }
+//
+//        let range = file.lines[startLine - 1].range
+//        let regex = ClosureEndIndentationRule.notWhitespace
+//        let actual = endPosition - 1
+//        guard let match = regex.firstMatch(in: file.contents, options: [], range: range)?.range,
+//            case let expected = match.location - range.location,
+//            expected != actual  else {
+//                return []
+//        }
+//
+//        let reason = "Closure end should have the same indentation as the line that started it. " +
+//                     "Expected \(expected), got \(actual)."
+//        return [
+//            StyleViolation(ruleDescription: type(of: self).description,
+//                           severity: configuration.severity,
+//                           location: Location(file: file, byteOffset: endOffset),
+//                           reason: reason)
+//        ]
     }
 
     private func startOffset(forDictionary dictionary: [String: SourceKitRepresentable], file: File) -> Int? {
